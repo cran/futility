@@ -1,0 +1,11 @@
+51cab3ae53375d2c0c3437285323e66a *DESCRIPTION
+26bb37f76c4a1573a9c7845c367301db *NAMESPACE
+46026d3e6f7cf13147a3bae812cd6889 *R/futility.R
+953038d69f9ae2af8f36aceb7c1069ca *build/vignette.rds
+71edd61f61f58464b8186e7f25b0bc47 *inst/doc/bayesianIncidenceRateModel.Rnw
+5085d48d87b57e9a62a642337620389d *inst/doc/bayesianIncidenceRateModel.pdf
+3ef10b2b25b9f0d6d24b44b9b0927787 *man/completeTrial.byArm.Rd
+ff77b700b5be7a8884a7c97990b14f9d *man/completeTrial.pooledArms.Rd
+9361ae0eff939e81fac85d854e2e8cef *man/plotRCDF.byArm.Rd
+56c87ce363099a90a4aab63e9083bceb *man/plotRCDF.pooledArms.Rd
+71edd61f61f58464b8186e7f25b0bc47 *vignettes/bayesianIncidenceRateModel.Rnw
