@@ -5,9 +5,9 @@
 \title{Treatment Arm-Specific Simulation-Based Completion of a Randomized Efficacy Trial with a Time-to-Event Endpoint and Fixed Follow-up Using an Interim Data-set}
 \usage{
 completeTrial.byArm(interimData, nTrials, trtNames, N, enrollRate = NULL,
-  enrollRatePeriod, eventPriorWeight, eventPriorRate, missVaccProb = NULL,
-  fuTime, visitSchedule, visitSchedule2 = NULL, saveFile = NULL,
-  saveDir = NULL, randomSeed = NULL)
+  enrollRatePeriod, eventPriorWeight, eventPriorRate, fixedDropOutRate = NULL,
+  missVaccProb = NULL, fuTime, visitSchedule, visitSchedule2 = NULL,
+  saveFile = NULL, saveDir = NULL, randomSeed = NULL)
 }
 \arguments{
 \item{interimData}{a data frame capturing observed data at an interim timepoint that contains one row per enrolled participant and the following variables: \code{arm} (treatment arm), \code{schedule2} (an indicator that a participant follows the \code{visitSchedule2} schedule, e.g., participants who discontinue study product administration may remain in primary follow-up on a different schedule), \code{entry} (number of weeks since the reference date until the enrollment date), \code{exit} (number of weeks since the reference date until the trial exit date defined as the date of either infection diagnosis, dropout, or primary follow-up completion, whichever occurs first; \code{NA} for participants still in primary follow-up), \code{last_visit_dt} (number of weeks since the reference date until the last visit date), \code{event} (event indicator), \code{dropout} (dropout indicator), \code{complete} (indicator of completed follow-up), \code{followup} (indicator of being in primary follow-up). The reference date is defined as the enrollment date of the first participant. The variables \code{entry}, \code{exit}, and \code{last_visit_dt} use week as the unit of time. Month is defined as 52/12 weeks.}
@@ -25,6 +25,8 @@ completeTrial.byArm(interimData, nTrials, trtNames, N, enrollRate = NULL,
 \item{eventPriorWeight}{a numeric value in \eqn{[0,1]} representing a weight assigned to the prior gamma distribution of the treatment arm-specific event rates at the time when 50\% of the estimated person-time at risk in each arm has been accumulated (see the vignette)}
 
 \item{eventPriorRate}{a numeric vector of treatment arm-specific prior mean incidence rates for the endpoint, expressed as numbers of events per person-year at risk, with the arms in the same order as in \code{trtNames}}
+
+\item{fixedDropOutRate}{the pre-trial assumed annual treatment arm-pooled dropout rate. If \code{NULL} (default), then the observed treatment arm-pooled dropout rate is used.}
 
 \item{missVaccProb}{a probability of being excluded from the per-protocol cohort. If \code{NULL} (default), no per-protocol indicator is generated; if specified, the indicator is sampled from the Bernoulli distribution with probability \code{missVaccProb}.}
 
@@ -49,9 +51,11 @@ If \code{saveDir} is specified, the output list (named \code{trialObj}) is saved
 \item \code{rates}: a list with three components:
 \itemize{
 \item \code{enrollRate}: the treatment arm-pooled \emph{weekly} enrollment rate
-\item \code{dropRate}: the average \emph{annual} treatment arm-pooled dropout rate in \code{interimData}
+\item \code{dropRate}: \code{fixedDropOutRate}, or, if \code{NULL}, the average \emph{annual} treatment arm-pooled dropout rate in \code{interimData}
 \item \code{eventPostRate}: a list with \code{length(trtNames)} components (labeled by the levels of the \code{arm} variable in \code{interimData}) each of which is a numeric vector of length \code{nTrials} of the sampled treatment arm-specific posterior \emph{annual} event rates
 }
+\item \code{BetaOverBetaPlusTk}: a list with \code{length(trtNames)} components (labeled by the levels of the \code{arm} variable in \code{interimData}) each of which is the arm-specific weight placed on the prior mean event rate
+\item \code{TkOverTstar}: a list with \code{length(trtNames)} components (labeled by the levels of the \code{arm} variable in \code{interimData}) each of which is the ratio of the observed arm-specific person-time at risk to the estimated total arm-specific person-time at risk, with the arm-specific event rates set equal to the components of \code{eventPriorRate} in the estimator for the total arm-specific person-time at risk
 \item \code{randomSeed}: seed of the random number generator for simulation reproducibility
 }
 }

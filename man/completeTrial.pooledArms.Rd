@@ -6,8 +6,10 @@
 \usage{
 completeTrial.pooledArms(interimData, nTrials, N, enrollRate = NULL,
   enrollRatePeriod = NULL, eventPriorWeight, eventPriorRate = NULL,
-  missVaccProb = NULL, fuTime, visitSchedule, visitSchedule2 = NULL,
-  saveFile = NULL, saveDir = NULL, randomSeed = NULL)
+  fixedDropOutRate = NULL, missVaccProb = NULL, fuTime, mixture = FALSE,
+  mix.weights = NULL, eventPriorWeightRobust = NULL, visitSchedule,
+  visitSchedule2 = NULL, saveFile = NULL, saveDir = NULL,
+  randomSeed = NULL)
 }
 \arguments{
 \item{interimData}{a data frame capturing observed data at an interim timepoint that contains one row per enrolled participant and the following variables: \code{arm} (treatment arm), \code{schedule2} (an indicator that a participant follows the \code{visitSchedule2} schedule, e.g., participants who discontinue study product administration may remain in primary follow-up on a different schedule), \code{entry} (number of weeks since the reference date until the enrollment date), \code{exit} (number of weeks since the reference date until the trial exit date defined as the date of either infection diagnosis, dropout, or primary follow-up completion, whichever occurs first; \code{NA} for participants still in primary follow-up), \code{last_visit_dt} (number of weeks since the reference date until the last visit date), \code{event} (event indicator), \code{dropout} (dropout indicator), \code{complete} (indicator of completed follow-up), \code{followup} (indicator of being in primary follow-up). The reference date is defined as the enrollment date of the first participant. The variables \code{entry}, \code{exit}, and \code{last_visit_dt} use week as the unit of time. Month is defined as 52/12 weeks.}
@@ -24,9 +26,17 @@ completeTrial.pooledArms(interimData, nTrials, N, enrollRate = NULL,
 
 \item{eventPriorRate}{a numeric value of a treatment arm-pooled prior mean incidence rate for the endpoint, expressed as the number of events per person-year at risk. If \code{NULL} (default), then use the observed rate in \code{interimData}.}
 
+\item{fixedDropOutRate}{the pre-trial assumed annual dropout rate. If \code{NULL} (default), then the observed treatment arm-pooled dropout rate is used.}
+
 \item{missVaccProb}{a probability of being excluded from the per-protocol cohort. If \code{NULL} (default), no per-protocol indicator is generated; if specified, the indicator is sampled from the Bernoulli distribution with probability \code{missVaccProb}.}
 
 \item{fuTime}{a follow-up time (in weeks) of each participant}
+
+\item{mixture}{a logical value indicating whether to use the robust mixture approach (see the vignette). If equal to \code{FALSE} (default), then \code{mix.weights} and \code{eventPriorWeightRobust} are ignored.}
+
+\item{mix.weights}{a numeric vector of length 2 representing prior weights (values in \eqn{[0,1]}) of the informative and the weakly informative component, respectively, of the prior gamma-mixture distribution of the treatment arm-pooled event rate. The two weights must sum up to 1. If \code{NULL} (default) and \code{mixture=TRUE}, then \code{c(0.8,0.2)} is used.}
+
+\item{eventPriorWeightRobust}{a numeric value representing the weight \eqn{w} used to calculate the \eqn{\beta} parameter of the weakly informative gamma distribution in the mixture prior. If \code{NULL} (default) and \code{mixture=TRUE}, then \eqn{1/200} is used.}
 
 \item{visitSchedule}{a numeric vector of visit weeks at which testing for the endpoint is conducted}
 
@@ -47,15 +57,18 @@ If \code{saveDir} is specified, the output list (named \code{trialObj}) is saved
 \item \code{rates}: a list with three components:
 \itemize{
 \item \code{enrollRate}: the treatment arm-pooled \emph{weekly} enrollment rate
-\item \code{dropRate}: the average \emph{annual} treatment arm-pooled dropout rate in \code{interimData}
-\item \code{eventPostRate}: a numeric vector of length \code{nTrials} of the sampled treatment arm-pooled posterior \emph{annual} event rates
+\item \code{dropRate}: \code{fixedDropOutRate}, or, if \code{NULL}, the average \emph{annual} treatment arm-pooled dropout rate in \code{interimData}
+\item \code{eventPostRate}: a numeric vector of length \code{nTrials} of the treatment arm-pooled \emph{annual} event rates sampled from the posterior distribution
 }
+\item \code{BetaOverBetaPlusTk}: the weight placed on the prior mean event rate
+\item \code{TkOverTstar}: the ratio of the observed person-time at risk to the estimated total person-time at risk, with the event rate set equal to \code{eventPriorRate} in the estimator for the total person-time at risk
 \item \code{randomSeed}: seed of the random number generator for simulation reproducibility
+\item \code{w.post}: the weights, summing up to 1, of the gamma components of the posterior mixture distribution of the treatment arm-pooled event rate. If \code{mixture=FALSE}, then \code{w.post=NA}.
 }
 }
 \description{
 Considers data collected through an interim timepoint and generates independent time-to-event data-sets, ignoring treatment assignments, to assess the distribution of the number of treatment arm-pooled endpoints
-at the end of the follow-up period. A Bayesian model for the treatment arm-pooled endpoint rate is used for generating future data (see the vignette).
+at the end of the follow-up period. A Bayesian model for the treatment arm-pooled endpoint rate, offering the option to specify a robust mixture prior distribution, is used for generating future data (see the vignette).
 }
 \examples{
 arm <- rep(c("C3","T1","T2"), each=250)
