@@ -4,9 +4,10 @@
 \alias{plotRCDF.pooledArms}
 \title{Plot Characteristics of the Estimated Distribution of the Treatment Arm-Pooled Number of Endpoints}
 \usage{
-plotRCDF.pooledArms(eventTimeFrame = NULL, eventPPcohort = FALSE, target,
-  power.axis = TRUE, power.TE = NULL, eventPriorRate, eventPriorWeight,
-  xlim = NULL, xlab = NULL, ylab = NULL, power.lab = NULL, fileDir)
+plotRCDF.pooledArms(eventTimeFrame = NULL, eventPPcohort = FALSE,
+  target, power.axis = TRUE, power.TE = NULL, eventPriorRate,
+  eventPriorWeight, xlim = NULL, xlab = NULL, ylab = NULL,
+  power.lab = NULL, xPosLegend = 0.67, fileDir)
 }
 \arguments{
 \item{eventTimeFrame}{a time frame within which endpoints are counted, specified in weeks as \code{c(start, end)}. If \code{NULL} (default), then all endpoints are counted.}
@@ -30,6 +31,8 @@ plotRCDF.pooledArms(eventTimeFrame = NULL, eventPPcohort = FALSE, target,
 \item{ylab}{a character string for the user-specified y-axis label. If \code{NULL} (default), then the label "P( Total Number of Infections >= n ) x 100" will be used.}
 
 \item{power.lab}{a character string for the user-specified power-axis label. If \code{NULL} (default), then the label "Power for TE = \code{power.TE} (x 100)" will be used.}
+
+\item{xPosLegend}{a numeric value in \eqn{[0,1]} (0.67 by default) specifying the x-coordinate for the position of the legend}
 
 \item{fileDir}{a character string specifying a path for the input directory}
 }

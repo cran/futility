@@ -5,12 +5,11 @@ NULL
 #' @import utils
 NULL
 
-globalVariables("trialObj")
+globalVariables(c("trialObj", "pp", "eventTime"))
 
-is.TRUE <- function(x)
-{
+is.TRUE <- function(x){
   if ( !is.logical(x) ) stop("Argument to 'is.TRUE' must be of type Logical")
-  x & !is.na(x)
+  return(x & !is.na(x))
 }
 
 is.wholenumber <-function(x, tol = .Machine$double.eps^0.5)  abs(x - round(x)) < tol
@@ -21,8 +20,7 @@ is.wholenumber <-function(x, tol = .Machine$double.eps^0.5)  abs(x - round(x)) <
 ## time of the next or previous scheduled visit.  The returned times
 ## are according to the visit schedule
 
-getVisitWeek <- function( week, visitWeeks, whichVisit=c("next","previous"))
-{
+getVisitWeek <- function( week, visitWeeks, whichVisit=c("next","previous")){
   whichVisit <- match.arg( whichVisit )
 
   ## check for NAs
@@ -45,12 +43,10 @@ getVisitWeek <- function( week, visitWeeks, whichVisit=c("next","previous"))
   return(week)
 }
 
-FillinInterimdata.Pooled <-
-  function(interimData, rates, visitSchedule, visitSchedule2 = NULL, Nppt, fuTime, Seed = NULL)
-  {
+FillinInterimdata.Pooled <- function(interimData, rates, visitSchedule, visitSchedule2 = NULL, Nppt, fuTime, ppAnalysis=FALSE, missVaccProb=NULL, ppAtRiskTimePoint=NULL, Seed = NULL){
 
     ## Finish enrollment and get enrollment times
-    Nenroll<-Nppt-nrow(interimData)
+    Nenroll <- Nppt - NROW(interimData)
 
     #Keep recruiting week by week untill Nenroll participants have been recruited
     ii<-0
@@ -151,6 +147,13 @@ FillinInterimdata.Pooled <-
       event = as.integer(event),
       dropout=as.integer(droppedout)
     )
+
+    # generate the indicator of membership in the per-protocol cohort
+    if (ppAnalysis){
+      if (!is.null(Seed)){ set.seed(Seed) }
+      out$missVacc <- rbinom(NROW(out), 1, prob=missVaccProb)
+      out$pp <- as.numeric(out$missVacc==0 & out$exit - out$entry > ppAtRiskTimePoint)
+    }
 
     ##Now we are done filling in data that are newly enrolled, which is "out"
     ##Next we need to fill in data for the already enrolled in the interimData
@@ -259,6 +262,11 @@ FillinInterimdata.Pooled <-
       dropout=as.integer(interimData$dropout)
     )
 
+    if (ppAnalysis){
+      interimData.filled$missVacc <- interimData$missVacc
+      interimData.filled$pp <- interimData$pp
+    }
+
     ####################################
     #Change exit from reference time being the end of observed follow-up time to each subject in follow-up back to orignial timeline.
     ####################################
@@ -271,13 +279,21 @@ FillinInterimdata.Pooled <-
     interimData.filled$event[is.na(interimData$exit)]<-event
     interimData.filled$dropout[is.na(interimData$exit)]<-droppedout
 
-    return(rbind(interimData.filled,out))
+    # generate the indicator of membership in the per-protocol cohort
+    if (ppAnalysis){
+      if (!is.null(Seed)){ set.seed(Seed+10000) }
+      interimData.filled$missVacc <- ifelse(interimData$missVacc==0 & is.na(interimData$pp), rbinom(NROW(interimData), 1, prob=missVaccProb), interimData$missVacc)
+      interimData.filled$pp <- ifelse(is.na(interimData$pp), as.numeric(interimData$missVacc==0 & interimData$exit - interimData$entry > ppAtRiskTimePoint), interimData$pp)
+    }
+
+    out <- rbind(interimData.filled, out)
+    out$missVacc <- NULL
+
+    return(out)
   }
 
 
-FillinInterimdata.byArm <-
-  function(interimData, rates, visitSchedule, visitSchedule2 = NULL, trtNames, N, fuTime, Seed = NULL)
-  {
+FillinInterimdata.byArm <- function(interimData, rates, visitSchedule, visitSchedule2 = NULL, trtNames, N, fuTime, ppAnalysis=FALSE, missVaccProb=NULL, ppAtRiskTimePoint=NULL, Seed = NULL){
     nArms <- length(N)
     ## Finish enroll by arm and get enrollment times
     Nenroll<-NULL
@@ -398,6 +414,13 @@ FillinInterimdata.byArm <-
       dropout=as.integer(droppedout)
     )
 
+    # generate the indicator of membership in the per-protocol cohort
+    if (ppAnalysis){
+      if (!is.null(Seed)){ set.seed(Seed) }
+      out$missVacc <- rbinom(NROW(out), 1, prob=missVaccProb)
+      out$pp <- as.numeric(out$missVacc==0 & out$exit - out$entry > ppAtRiskTimePoint)
+    }
+
     ##Now we are done filling in data that are newly enrolled, which is "out"
     ##Next we need to fill in data for the already enrolled in the interimData
 
@@ -517,36 +540,50 @@ FillinInterimdata.byArm <-
       dropout=as.integer(interimData$dropout)
     )
 
+    if (ppAnalysis){
+      interimData.filled$missVacc <- interimData$missVacc
+      interimData.filled$pp <- interimData$pp
+    }
+
     ####################################
     #Change exit from reference time being the end of observed follow-up time to each subject in follow-up back to orignial timeline.
     ####################################
     #interimData.filled$exit[is.na(interimData$exit)]<-exit
     interimData.filled$exit[is.na(interimData$exit)]<-interimData.filled$entry[is.na(interimData$exit)]+adj.fUP+exit
 
-    #sanity check
-    summary(interimData.filled$exit[is.na(interimData$exit)]-interimData.filled$entry[is.na(interimData$exit)])
-
     interimData.filled$event[is.na(interimData$exit)]<-event
     interimData.filled$dropout[is.na(interimData$exit)]<-droppedout
 
-    return(rbind(interimData.filled,out))
+    # generate the indicator of membership in the per-protocol cohort
+    if (ppAnalysis){
+      if (!is.null(Seed)){ set.seed(Seed+10000) }
+      interimData.filled$missVacc <- ifelse(interimData$missVacc==0 & is.na(interimData$pp), rbinom(NROW(interimData), 1, prob=missVaccProb), interimData$missVacc)
+      interimData.filled$pp <- ifelse(is.na(interimData$pp), as.numeric(interimData$missVacc==0 & interimData$exit - interimData$entry > ppAtRiskTimePoint), interimData$pp)
+    }
+
+    out <- rbind(interimData.filled, out)
+    out$missVacc <- NULL
+
+    return(out)
   }
 
 #' Treatment Arm-Pooled Simulation-Based Completion of a Randomized Efficacy Trial with a Time-to-Event Endpoint and Fixed Follow-up Using an Interim Data-set
 #'
-#' Considers data collected through an interim timepoint and generates independent time-to-event data-sets, ignoring treatment assignments, to assess the distribution of the number of treatment arm-pooled endpoints
+#' Considers MITT data collected through an interim timepoint and generates independent time-to-event data-sets, ignoring treatment assignments, to assess the distribution of the number of treatment arm-pooled endpoints
 #' at the end of the follow-up period. A Bayesian model for the treatment arm-pooled endpoint rate, offering the option to specify a robust mixture prior distribution, is used for generating future data (see the vignette).
 #'
-#' @param interimData a data frame capturing observed data at an interim timepoint that contains one row per enrolled participant and the following variables: \code{arm} (treatment arm), \code{schedule2} (an indicator that a participant follows the \code{visitSchedule2} schedule, e.g., participants who discontinue study product administration may remain in primary follow-up on a different schedule), \code{entry} (number of weeks since the reference date until the enrollment date), \code{exit} (number of weeks since the reference date until the trial exit date defined as the date of either infection diagnosis, dropout, or primary follow-up completion, whichever occurs first; \code{NA} for participants still in primary follow-up), \code{last_visit_dt} (number of weeks since the reference date until the last visit date), \code{event} (event indicator), \code{dropout} (dropout indicator), \code{complete} (indicator of completed follow-up), \code{followup} (indicator of being in primary follow-up). The reference date is defined as the enrollment date of the first participant. The variables \code{entry}, \code{exit}, and \code{last_visit_dt} use week as the unit of time. Month is defined as 52/12 weeks.
+#' @param interimData a data frame capturing observed MITT data at an interim timepoint that contains one row per enrolled participant in the MITT cohort and the following variables: \code{arm} (treatment arm), \code{schedule2} (an indicator that a participant follows the \code{visitSchedule2} schedule, e.g., participants who discontinue study product administration may remain in primary follow-up on a different schedule), \code{entry} (number of weeks since the reference date until the enrollment date), \code{exit} (number of weeks since the reference date until the trial exit date defined as the date of either infection diagnosis, dropout, or primary follow-up completion, whichever occurs first; \code{NA} for participants still in primary follow-up), \code{last_visit_dt} (number of weeks since the reference date until the last visit date), \code{event} (event indicator), \code{dropout} (dropout indicator), \code{complete} (indicator of completed follow-up), \code{followup} (indicator of being in primary follow-up). The reference date is defined as the enrollment date of the first participant. The variables \code{entry}, \code{exit}, and \code{last_visit_dt} use week as the unit of time. Month is defined as 52/12 weeks.
 #' @param nTrials the number of trials to be simulated
 #' @param N the total target number of enrolled participants
 #' @param enrollRate a treatment arm-pooled weekly enrollment rate used for completing enrollment if fewer than \code{N} participants were enrolled in \code{interimData}. If \code{NULL} (default), the rate is calculated as the average over the last \code{enrollRatePeriod} weeks of enrollment in \code{interimData}. If equal to a numerical value, then \code{enrollRatePeriod} is ignored.
 #' @param enrollRatePeriod the length (in weeks) of the time period preceding the time of the last enrolled participant in \code{interimData} that the average weekly enrollment rate will be based on and used for completing enrollment. If \code{NULL} (default), then \code{enrollRate} must be specified.
 #' @param eventPriorWeight a numeric value in \eqn{[0,1]} representing a weight assigned to the prior gamma distribution of the treatment arm-pooled event rate at the time when 50\% of the estimated total person-time at risk has been accumulated (see the vignette)
 #' @param eventPriorRate a numeric value of a treatment arm-pooled prior mean incidence rate for the endpoint, expressed as the number of events per person-year at risk. If \code{NULL} (default), then use the observed rate in \code{interimData}.
-#' @param missVaccProb a probability of being excluded from the per-protocol cohort. If \code{NULL} (default), no per-protocol indicator is generated; if specified, the indicator is sampled from the Bernoulli distribution with probability \code{missVaccProb}.
-#' @param fuTime a follow-up time (in weeks) of each participant
 #' @param fixedDropOutRate the pre-trial assumed annual dropout rate. If \code{NULL} (default), then the observed treatment arm-pooled dropout rate is used.
+#' @param ppAnalysis a logical value (\code{FALSE} by default) indicating whether an indicator of membership in the per-protocol cohort shall be generated based on complete MITT data. If \code{TRUE}, then \code{interimData} must include two additional variables: \code{missVacc} (an indicator of a missed vaccination) and \code{pp} (an indicator of membership in the per-protocol cohort; \code{NA} for participants with an indeterminate status).
+#' @param missVaccProb a probability that a participant misses at least one vaccination. If \code{NULL} (default) and \code{ppAnalysis=TRUE}, then \code{missVaccProb} is calculated as the sample proportion of MITT participants in \code{interimData} with a missed vaccination using the \code{missVacc} variable. If \code{ppAnalysis=TRUE}, then the indicator of a missed vaccination for participants in \code{interimData} with \code{pp=NA} and future enrolled participants is sampled from the Bernoulli distribution with probability \code{missVaccProb}.
+#' @param ppAtRiskTimePoint a minimal follow-up time (in weeks) for a participant to qualify for inclusion in the per-protocol cohort (\code{NULL} by default)
+#' @param fuTime a follow-up time (in weeks) of each participant
 #' @param mixture a logical value indicating whether to use the robust mixture approach (see the vignette). If equal to \code{FALSE} (default), then \code{mix.weights} and \code{eventPriorWeightRobust} are ignored.
 #' @param mix.weights a numeric vector of length 2 representing prior weights (values in \eqn{[0,1]}) of the informative and the weakly informative component, respectively, of the prior gamma-mixture distribution of the treatment arm-pooled event rate. The two weights must sum up to 1. If \code{NULL} (default) and \code{mixture=TRUE}, then \code{c(0.8,0.2)} is used.
 #' @param eventPriorWeightRobust a numeric value representing the weight \eqn{w} used to calculate the \eqn{\beta} parameter of the weakly informative gamma distribution in the mixture prior. If \code{NULL} (default) and \code{mixture=TRUE}, then \eqn{1/200} is used.
@@ -558,13 +595,13 @@ FillinInterimdata.byArm <-
 #'
 #' @return If \code{saveDir} is specified, the output list (named \code{trialObj}) is saved as an \code{.RData} file; otherwise it is returned. The output object is a list with the following components:
 #' \itemize{
-#' \item \code{trialData}: a list with \code{nTrials} components each of which is a \code{data.frame} with the variables \code{arm}, \code{entry}, \code{exit}, \code{event}, and \code{dropout} storing the treatment assignments, enrollment times, study exit times, event indicators, and dropout indicators respectively. The observed follow-up times can be recovered as \code{exit} - \code{entry}. Indicators of belonging to the per-protocol cohort (named \code{pp}) are included if \code{missVaccProb} is specified.
+#' \item \code{trialData}: a list with \code{nTrials} components each of which is a \code{data.frame} with the variables \code{arm}, \code{entry}, \code{exit}, \code{event}, and \code{dropout} storing the treatment assignments, enrollment times, study exit times, event indicators, and dropout indicators respectively. The observed follow-up times can be recovered as \code{exit} - \code{entry}. If \code{ppAnalysis=TRUE}, then the indicators of belonging to the per-protocol cohort (named \code{pp}) are included.
 #' \item \code{nTrials}: the number of simulated trials
 #' \item \code{N}: the total number of enrolled trial participants
 #' \item \code{rates}: a list with three components:
 #' \itemize{
 #' \item \code{enrollRate}: the treatment arm-pooled \emph{weekly} enrollment rate
-#' \item \code{dropRate}: \code{fixedDropOutRate}, or, if \code{NULL}, the average \emph{annual} treatment arm-pooled dropout rate in \code{interimData}
+#' \item \code{dropRate}: \code{fixedDropOutRate}, or, if \code{NULL}, the \emph{annual} treatment arm-pooled dropout rate in \code{interimData}
 #' \item \code{eventPostRate}: a numeric vector of length \code{nTrials} of the treatment arm-pooled \emph{annual} event rates sampled from the posterior distribution
 #' }
 #' \item \code{BetaOverBetaPlusTk}: the weight placed on the prior mean event rate
@@ -631,9 +668,14 @@ completeTrial.pooledArms <-
     # pre-trial assumptions on annual drop-out rate. If NULL, the observed drop-out rate is used.
     fixedDropOutRate=NULL,
 
+    # should the PP indicator be generated?
+    ppAnalysis = FALSE,
+
     #used to create "per-protocol" indicators
     #If specified, indicator for belonging to a per-protocol cohort is created
     missVaccProb = NULL,
+
+    ppAtRiskTimePoint = NULL,
 
     fuTime,
 
@@ -657,8 +699,7 @@ completeTrial.pooledArms <-
 
     saveFile= NULL,
     saveDir = NULL,
-    randomSeed = NULL )
-  {
+    randomSeed = NULL ){
     ## define 'eps' (epsilon) a fudge-factor used where we're concerned with the limits
     ## of floating point accuracy
     eps <- sqrt( .Machine$double.eps )
@@ -667,43 +708,46 @@ completeTrial.pooledArms <-
     Nppt <- N
 
     if(!is.null(enrollRate)){
-      enrollmentRate<-enrollRate
-    }else{
+      enrollmentRate <- enrollRate
+    } else {
       if(is.null(enrollRatePeriod)){
         stop("Arguments 'enrollRate' and 'enrollRatePeriod' cannot be both NULL.")
       }
 
-      #calculate enrollment rate based on interimData and enrollRatePeriod, rate=enrolled participants per week
-      enrollmentRate<-sum(interimData$entry>=(max(interimData$entry)-enrollRatePeriod))/enrollRatePeriod
+      # calculate weekly enrollment rate based on interimData and enrollRatePeriod, rate=enrolled participants per week
+      enrollmentRate <- sum(interimData$entry >= (max(interimData$entry) - enrollRatePeriod)) / enrollRatePeriod
     }
 
-    #follow up time for each subject
-    tFU<-ifelse(interimData$followup==1,interimData$last_visit_dt-interimData$entry,interimData$exit-interimData$entry)
-    #sum of follow up time for everyone in the interim data
-    totFU<-sum(tFU)
+    # a vector of individual follow-up times in weeks
+    tFU <- ifelse(interimData$followup==1, interimData$last_visit_dt - interimData$entry, interimData$exit - interimData$entry)
+    # the total observed person-weeks at risk in the interim data
+    totFU <- sum(tFU, na.rm=TRUE)
 
-    #calculate dropout rate based on interimData, rate=observed dropout per person-week
-    dropRate<-sum(interimData$dropout)/totFU
+    n_k <- sum(interimData$event)
+    T_k <- totFU
 
-    #calculate event rate
-    n_k<-sum(interimData$event)
-    T_k<-totFU #person-week
-
-    if (is.null( eventPriorRate)) {
-      #calculate event rate based on observed event rate
-      eventPriorRate<-sum(interimData$event)/sum(totFU) #events/person-week
-    }else{
+    if (is.null(eventPriorRate)) {
+      # calculate weekly event rate based on observed event rate
+      # T_k is in weeks
+      eventPriorRate <- n_k / T_k #events/person-week
+    } else {
       #change unit of per person-year to per person-week
-      eventPriorRate<-eventPriorRate/52
+      eventPriorRate <- eventPriorRate / 52
     }
 
     #Estimation of Total Person-Weeks at Risk (T_star)
     #pre-trial assumed dropout rate d_star=0.1 per person-year=0.1/52 per person-week
     if(!is.null(fixedDropOutRate)){
-      dropRate<-fixedDropOutRate/52
+      dropRate <- fixedDropOutRate / 52
+    } else {
+      #calculate weekly dropout rate based on interimData, rate=observed dropout per person-week
+      # 'totFU' is in weeks
+      dropRate <- sum(interimData$dropout) / totFU
     }
-    d_star<-dropRate
-    T_star<-N*(1-exp(-(d_star+eventPriorRate)*fuTime))/(d_star+eventPriorRate)
+
+    d_star <- dropRate
+    # estimate the total person-weeks at risk in the completed data using the user-specified event rate, if available, or else the observed event rate in the interim data
+    T_star <- N * (1 - exp(-(d_star + eventPriorRate) * fuTime)) / (d_star + eventPriorRate)
 
     ## if mixture==TRUE then alpha and beta should become vectors
     ## furthermore the weights need to be updated as well.
@@ -719,16 +763,14 @@ completeTrial.pooledArms <-
 
     ## if mixture=FALSE than these remain scalars
     ## because the two gamma have the same expected value, eventPriorRate can be used
-    ## if
-    beta<-T_star*eventPriorWeight/(2*(1-eventPriorWeight))
-    alpha<-beta*eventPriorRate
-
+    beta <- T_star * eventPriorWeight / (2 * (1 - eventPriorWeight))
+    alpha <- beta * eventPriorRate
 
     ## create lists for storage of trial data
     trialList  <- vector("list", nTrials)
 
     #record the weekly event rates
-    eventPostRate    <- rep(NA,nTrials)
+    eventPostRate <- rep(NA, nTrials)
 
     ## core of the mixture part
     if(mixture){
@@ -752,9 +794,8 @@ completeTrial.pooledArms <-
         w_post <- marg_lik * mix.weights / sum(marg_lik *mix.weights)
     }
 
-    for ( i in 1:nTrials )
-    {
-      if ( !is.null(randomSeed) ) set.seed( randomSeed+i )
+    for (i in 1:nTrials){
+      if (!is.null(randomSeed)){ set.seed(randomSeed+i) }
       #weekly event rate
       #event rate=rgamma( 1,  alpha + n_Events,  beta + totFU_for_event)
       if(mixture){
@@ -769,68 +810,65 @@ completeTrial.pooledArms <-
               #IDX <- which(w_post!=max(w_post))
             eventRate <- rgamma(1, alpha[-IDX]+n_k, beta[-IDX]+T_k)
           }
-      }else{
-          eventRate=rgamma( 1,  alpha + n_k,  beta+T_k)
+      } else {
+        # sample the weekly event rate from the posterior distribution
+        eventRate <- rgamma(1, alpha + n_k, beta + T_k)
       }
 
       ## 'parSet' contains weekly rates
       rates <- list(enrollmentRate=enrollmentRate, eventRate=eventRate, dropRate=dropRate)
 
-      ## generate data
-      out <- FillinInterimdata.Pooled(interimData=interimData, rates = rates,
-                                      visitSchedule = visitSchedule,
-                                      visitSchedule2 = visitSchedule2,
-                                      Nppt = Nppt, fuTime = fuTime,Seed = randomSeed+i)
-
-      if ( !is.null(missVaccProb) ) {
-        # create a set of indicators of belonging to a per-protocol cohort
-        if ( !is.null(randomSeed) ) set.seed( randomSeed+i )
-        out$pp<- rbinom( nrow(out), 1, prob=1 - missVaccProb)
+      if (ppAnalysis){
+        if (is.null(missVaccProb)){
+          missVaccProb <- sum(interimData$missvac, na.rm=TRUE) / NROW(interimData)
+        }
       }
 
-      trialList[[ i ]] <- out
+      ## generate data
+      trialList[[i]] <- FillinInterimdata.Pooled(interimData=interimData,
+                                      rates = rates,
+                                      visitSchedule = visitSchedule,
+                                      visitSchedule2 = visitSchedule2,
+                                      Nppt = Nppt,
+                                      fuTime = fuTime,
+                                      ppAnalysis = ppAnalysis,
+                                      missVaccProb = missVaccProb,
+                                      ppAtRiskTimePoint = ppAtRiskTimePoint,
+                                      Seed = randomSeed+i)
 
-      ## store rates into ratesList
-      eventPostRate[i]<-eventRate
+      ## store sampled posterior event rate
+      eventPostRate[i] <- eventRate
     }
 
     ## Put everything into a "trial Object"
-    trialObj <- list(
-      trialData = trialList,
-      nTrials = nTrials,
-      N = Nppt,
-      rates = list(enrollRate=enrollmentRate, #weekly enrollment rate
-                   dropRate=dropRate*52, #annual dropout rate
-                   eventPostRate=eventPostRate*52 #annual event rates
-      ),
-      BetaOverBetaPlusTk = beta/(beta+T_k),
-      TkOverTstar = T_k/T_star,
-      randomSeed = randomSeed,
-      w.post=ifelse(mixture, w_post, NA)
-    )
+    trialObj <- list(trialData = trialList, nTrials = nTrials, N = Nppt,
+                     rates = list(enrollRate=enrollmentRate, dropRate=dropRate * 52, eventPostRate=eventPostRate * 52),
+                     BetaOverBetaPlusTk = beta / (beta + T_k),
+                     TkOverTstar = T_k / T_star,
+                     randomSeed = randomSeed,
+                     w.post = ifelse(mixture, w_post, NA))
 
     # save trial output and information on used rates
-    if (!is.null(saveDir)) {
-      if (is.null(saveFile) ) {
-
-        #In file name, eventPriorRate shows the per person-YEAR rate
-        saveFile <-
-          paste0("completeTrial_pooled_eventPriorRate=", round(eventPriorRate*52,3),"_eventPriorWt=",round(eventPriorWeight,3),".RData" )
+    if (!is.null(saveDir)){
+      if (is.null(saveFile)){
+        # in the file name, eventPriorRate shows the per person-YEAR rate
+        saveFile <- paste0("completeTrial_pooled_eventPriorRate=", round(eventPriorRate * 52, 4), "_eventPriorWt=", round(eventPriorWeight, 3), ".RData")
       }
 
       save(trialObj, file=file.path(saveDir, saveFile))
     }
-    return( invisible( trialObj ) )
+
+    return(invisible(trialObj))
 
   }   ######################## End of completeTrial.pooledArms function #######################
 
 
 #' Treatment Arm-Specific Simulation-Based Completion of a Randomized Efficacy Trial with a Time-to-Event Endpoint and Fixed Follow-up Using an Interim Data-set
 #'
-#' Considers data collected through an interim timepoint and generates independent time-to-event data-sets, by treatment arm, to assess the distribution of the number of treatment arm-specific endpoints
+#' Considers MITT data collected through an interim timepoint and generates independent time-to-event data-sets, by treatment arm, to assess the distribution of the number of treatment arm-specific endpoints
 #' at the end of the follow-up period. A Bayesian model for treatment arm-specific endpoint rates is used for generating future data (see the vignette).
 #'
-#' @param interimData a data frame capturing observed data at an interim timepoint that contains one row per enrolled participant and the following variables: \code{arm} (treatment arm), \code{schedule2} (an indicator that a participant follows the \code{visitSchedule2} schedule, e.g., participants who discontinue study product administration may remain in primary follow-up on a different schedule), \code{entry} (number of weeks since the reference date until the enrollment date), \code{exit} (number of weeks since the reference date until the trial exit date defined as the date of either infection diagnosis, dropout, or primary follow-up completion, whichever occurs first; \code{NA} for participants still in primary follow-up), \code{last_visit_dt} (number of weeks since the reference date until the last visit date), \code{event} (event indicator), \code{dropout} (dropout indicator), \code{complete} (indicator of completed follow-up), \code{followup} (indicator of being in primary follow-up). The reference date is defined as the enrollment date of the first participant. The variables \code{entry}, \code{exit}, and \code{last_visit_dt} use week as the unit of time. Month is defined as 52/12 weeks.
+#' @param interimData a data frame capturing observed MITT data at an interim timepoint that contains one row per enrolled participant in the MITT cohort and the following variables: \code{arm} (treatment arm), \code{schedule2} (an indicator that a participant follows the \code{visitSchedule2} schedule, e.g., participants who discontinue study product administration may remain in primary follow-up on a different schedule), \code{entry} (number of weeks since the reference date until the enrollment date), \code{exit} (number of weeks since the reference date until the trial exit date defined as the date of either infection diagnosis, dropout, or primary follow-up completion, whichever occurs first; \code{NA} for participants still in primary follow-up), \code{last_visit_dt} (number of weeks since the reference date until the last visit date), \code{event} (event indicator), \code{dropout} (dropout indicator), \code{complete} (indicator of completed follow-up), \code{followup} (indicator of being in primary follow-up). The reference date is defined as the enrollment date of the first participant. The variables \code{entry}, \code{exit}, and \code{last_visit_dt} use week as the unit of time. Month is defined as 52/12 weeks.
 #' @param nTrials the number of trials to be simulated
 #' @param trtNames a character vector of treatment labels as specified in \code{interimData$arm} determining the order of treatment arms in other input arguments
 #' @param N a numeric vector specifying the target number of enrolled participants in each treatment arm, with the arms in the same order as in \code{trtNames}
@@ -839,7 +877,9 @@ completeTrial.pooledArms <-
 #' @param eventPriorWeight a numeric value in \eqn{[0,1]} representing a weight assigned to the prior gamma distribution of the treatment arm-specific event rates at the time when 50\% of the estimated person-time at risk in each arm has been accumulated (see the vignette)
 #' @param eventPriorRate a numeric vector of treatment arm-specific prior mean incidence rates for the endpoint, expressed as numbers of events per person-year at risk, with the arms in the same order as in \code{trtNames}
 #' @param fixedDropOutRate the pre-trial assumed annual treatment arm-pooled dropout rate. If \code{NULL} (default), then the observed treatment arm-pooled dropout rate is used.
-#' @param missVaccProb a probability of being excluded from the per-protocol cohort. If \code{NULL} (default), no per-protocol indicator is generated; if specified, the indicator is sampled from the Bernoulli distribution with probability \code{missVaccProb}.
+#' @param ppAnalysis a logical value (\code{FALSE} by default) indicating whether an indicator of membership in the per-protocol cohort shall be generated based on complete MITT data. If \code{TRUE}, then \code{interimData} must include two additional variables: \code{missVacc} (an indicator of a missed vaccination) and \code{pp} (an indicator of membership in the per-protocol cohort; \code{NA} for participants with an indeterminate status).
+#' @param missVaccProb a probability that a participant misses at least one vaccination. If \code{NULL} (default) and \code{ppAnalysis=TRUE}, then \code{missVaccProb} is calculated as the sample proportion of MITT participants in \code{interimData} with a missed vaccination using the \code{missVacc} variable. If \code{ppAnalysis=TRUE}, then the indicator of a missed vaccination for participants in \code{interimData} with \code{pp=NA} and future enrolled participants is sampled from the Bernoulli distribution with probability \code{missVaccProb}.
+#' @param ppAtRiskTimePoint a minimal follow-up time (in weeks) for a participant to qualify for inclusion in the per-protocol cohort (\code{NULL} by default)
 #' @param fuTime a follow-up time (in weeks) of each participant
 #' @param visitSchedule a numeric vector of visit weeks at which testing for the endpoint is conducted
 #' @param visitSchedule2 a numeric vector of visit weeks at which testing for the endpoint is conducted in a subset of participants (e.g., those who discontinue administration of the study product but remain in follow-up). If \code{NULL} (default), everyone is assumed to follow \code{visitSchedule}.
@@ -849,13 +889,13 @@ completeTrial.pooledArms <-
 #'
 #' @return If \code{saveDir} is specified, the output list (named \code{trialObj}) is saved as an \code{.RData} file; otherwise it is returned. The output object is a list with the following components:
 #' \itemize{
-#' \item \code{trialData}: a list with \code{nTrials} components each of which is a \code{data.frame} with the variables \code{arm}, \code{entry}, \code{exit}, \code{event}, and \code{dropout} storing the treatment assignments, enrollment times, study exit times, event indicators, and dropout indicators, respectively. The observed follow-up times can be recovered as \code{exit} - \code{entry}. Indicators of belonging to the per-protocol cohort (named \code{pp}) are included if \code{missVaccProb} is specified.
+#' \item \code{trialData}: a list with \code{nTrials} components each of which is a \code{data.frame} with the variables \code{arm}, \code{entry}, \code{exit}, \code{event}, and \code{dropout} storing the treatment assignments, enrollment times, study exit times, event indicators, and dropout indicators, respectively. The observed follow-up times can be recovered as \code{exit} - \code{entry}. If \code{ppAnalysis=TRUE}, then the indicators of belonging to the per-protocol cohort (named \code{pp}) are included.
 #' \item \code{nTrials}: the number of simulated trials
 #' \item \code{N}: the total number of enrolled trial participants
 #' \item \code{rates}: a list with three components:
 #' \itemize{
 #' \item \code{enrollRate}: the treatment arm-pooled \emph{weekly} enrollment rate
-#' \item \code{dropRate}: \code{fixedDropOutRate}, or, if \code{NULL}, the average \emph{annual} treatment arm-pooled dropout rate in \code{interimData}
+#' \item \code{dropRate}: \code{fixedDropOutRate}, or, if \code{NULL}, the \emph{annual} treatment arm-pooled dropout rate in \code{interimData}
 #' \item \code{eventPostRate}: a list with \code{length(trtNames)} components (labeled by the levels of the \code{arm} variable in \code{interimData}) each of which is a numeric vector of length \code{nTrials} of the sampled treatment arm-specific posterior \emph{annual} event rates
 #' }
 #' \item \code{BetaOverBetaPlusTk}: a list with \code{length(trtNames)} components (labeled by the levels of the \code{arm} variable in \code{interimData}) each of which is the arm-specific weight placed on the prior mean event rate
@@ -913,18 +953,23 @@ completeTrial.byArm <-
     # the period that the enrollment rate will be calculated based on, in weeks
     enrollRatePeriod,
 
-    eventPriorWeight ,
+    eventPriorWeight,
     # pre-trial assumed event rate, needs to be in unit of # per person-year
     # a vector for each treatment arm, same order as trtNames
     # eventPriorRate can not be null
-    eventPriorRate ,
+    eventPriorRate,
 
     # pre-trial assumptions on annual drop-out rate. If NULL, the observed drop-out rate is used.
     fixedDropOutRate=NULL,
 
+    # should the PP indicator be generated?
+    ppAnalysis = FALSE,
+
     #used to create "per-protocol" indicators
     #If specified, indicator for belonging to a per-protocol cohort is created
     missVaccProb = NULL,
+
+    ppAtRiskTimePoint = NULL,
 
     fuTime,
 
@@ -935,66 +980,73 @@ completeTrial.byArm <-
     #if Null, everyone is assumed to follow visitSchedule
     visitSchedule2 = NULL,
 
-
     saveFile= NULL,
     saveDir = NULL,
-    randomSeed = NULL )
-  {
+    randomSeed = NULL ){
     ## define 'eps' (epsilon) a fudge-factor used where we're concerned with the limits
     ## of floating point accuracy
     eps <- sqrt( .Machine$double.eps )
 
-    if(!is.null(enrollRate)){
-      enrollmentRate<-enrollRate
-    }else{
-      if(is.null(enrollRatePeriod)){
+    if (!is.null(enrollRate)){
+      enrollmentRate <- enrollRate
+    } else {
+      if (is.null(enrollRatePeriod)){
         stop("Arguments 'enrollRate' and 'enrollRatePeriod' cannot be both NULL.")
       }
 
-      #calculate arm-pooled enrollment rate based on interimData and enrollRatePeriod, rate=enrolled participants per week
-      enrollmentRate<-sum(interimData$entry>=(max(interimData$entry)-enrollRatePeriod))/enrollRatePeriod
+      #calculate arm-pooled weekly enrollment rate based on interimData and enrollRatePeriod, rate=enrolled participants per week
+      enrollmentRate <- sum(interimData$entry >= (max(interimData$entry) - enrollRatePeriod)) / enrollRatePeriod
     }
 
-    #follow up time for each subject
-    tFU<-ifelse(interimData$followup==1,interimData$last_visit_dt-interimData$entry,interimData$exit-interimData$entry)
-    #sum of follow up time for everyone in the interim data
-    totFU<-sum(tFU)
-
-    #calculate arm-pooled dropout rate based on interimData, rate=observed dropout per person-week
-    dropRate<-sum(interimData$dropout)/totFU
+    # a vector of individual follow-up times in weeks
+    tFU <- ifelse(interimData$followup==1, interimData$last_visit_dt - interimData$entry, interimData$exit - interimData$entry)
+    # the total observed person-weeks at risk in the interim data
+    totFU <- sum(tFU, na.rm=TRUE)
 
     ## check 'trtNames' contains the same elements as interimData$arm
-    if(!setequal(trtNames, interimData$arm)){
-      stop("'trtNames' and 'arm' variable in interimData must contain the same (unordered) elements.")
+    if (!setequal(trtNames, interimData$arm)){
+      stop("The input argument 'trtNames' and the variable 'arm' in 'interimData' must contain the same unique elements.")
     }
+
     nArms <- length(N)
 
-    #calculate arm-specifc event count
-    n_k<-NULL
+    # a vector of arm-specifc event counts
+    n_k <- NULL
     for(i in 1:nArms){
-      n_k<-c(n_k,sum(interimData$event[interimData$arm==trtNames[i]]))
+      n_k <- c(n_k, sum(interimData$event[interimData$arm==trtNames[i]]))
     }
 
-
-    #arm specific follow up time for each subject
-    T_k<-NULL
+    # a vector of arm-specific person-weeks at risk
+    T_k <- NULL
     for(i in 1:nArms){
-      T_k<-c(T_k,sum(tFU[interimData$arm==trtNames[i]]))
+      T_k <- c(T_k, sum(tFU[interimData$arm==trtNames[i]], na.rm=TRUE))
     }
 
-    #change unit of per person-year to per person-week
-    eventPriorRate<-eventPriorRate/52
+    if (is.null(eventPriorRate)) {
+      # calculate weekly arm-specific event rates based on observed arm-specific event rates
+      # T_k is in weeks
+      eventPriorRate <- n_k / T_k #events/person-week
+    } else {
+      #change unit of per person-year to per person-week
+      eventPriorRate <- eventPriorRate / 52
+    }
 
     #Estimation of Arm Specific Total Person-Weeks at Risk (T_star)
     #pre-trial assumed dropout rate d_star=0.1 per person-year=0.1/52 per person-week
-    if(!is.null(fixedDropOutRate)){
-      dropRate<-fixedDropOutRate/52
+    if (!is.null(fixedDropOutRate)){
+      dropRate <- fixedDropOutRate / 52
+    } else {
+      #calculate weekly dropout rate based on interimData, rate=observed dropout per person-week
+      # 'totFU' is in weeks
+      dropRate <- sum(interimData$dropout) / totFU
     }
-    d_star<-dropRate
-    T_star<-N*(1-exp(-(d_star+eventPriorRate)*fuTime))/(d_star+eventPriorRate)
 
-    beta<-T_star*eventPriorWeight/(2*(1-eventPriorWeight))
-    alpha<-beta*eventPriorRate
+    d_star <- dropRate
+    # estimate the arm-specific person-weeks at risk in the completed data using the user-specified arm-specific event rates, if available, or else the observed event rates in the interim data
+    T_star <- N * (1 - exp(-(d_star + eventPriorRate) * fuTime)) / (d_star + eventPriorRate)
+
+    beta <- T_star * eventPriorWeight / (2 * (1 - eventPriorWeight))
+    alpha <- beta * eventPriorRate
 
     ## create lists for storage of trial data
     trialList  <- vector("list", nTrials)
@@ -1002,74 +1054,66 @@ completeTrial.byArm <-
     #record arm-specific weekly event rates
     eventPostRate    <- vector("list", nArms)
     for (i in 1:nArms){
-    eventPostRate[[i]]    <- rep(NA,nTrials)
+      eventPostRate[[i]] <- rep(NA, nTrials)
     }
 
-    for ( i in 1:nTrials )
-    {
-      #arm specific weekly event rate
-      eventRate<-NULL
+    for (i in 1:nTrials){
+      #arm-specific weekly event rates
+      eventRate <- NULL
       for (j in 1:nArms){
-        if ( !is.null(randomSeed) ) set.seed( randomSeed+i )
-        eventRate <- c(eventRate, rgamma( 1,  alpha[j] + n_k[j],  beta[j] + T_k[j]))
+        if (!is.null(randomSeed)){ set.seed(randomSeed+i) }
+        # sample the weekly event rate from the posterior distribution
+        eventRate <- c(eventRate, rgamma(1, alpha[j] + n_k[j],  beta[j] + T_k[j]))
       }
 
-      ## 'parSet' contains all arm specific weekly rates
-      rates <- list(enrollmentRate=enrollmentRate,
-                    dropRate=dropRate,
-                    eventRate=eventRate
-      )
+      ## 'parSet' contains all arm-specific weekly rates
+      rates <- list(enrollmentRate=enrollmentRate, dropRate=dropRate, eventRate=eventRate)
+
+      if (ppAnalysis){
+        if (is.null(missVaccProb)){
+          # the sample proportion of participants with at least 1 missed vaccination pooling over all arms
+          missVaccProb <- sum(interimData$missvac, na.rm=TRUE) / NROW(interimData)
+        }
+      }
 
       ## generate data
-      out <- FillinInterimdata.byArm(interimData=interimData, rates = rates,
-                                     visitSchedule = visitSchedule,
-                                     visitSchedule2 = visitSchedule2,
-                                     trtNames=trtNames, N = N,
-                                     fuTime = fuTime, Seed = randomSeed+i)
+      trialList[[i]] <- FillinInterimdata.byArm(interimData=interimData,
+                                                rates = rates,
+                                                visitSchedule = visitSchedule,
+                                                visitSchedule2 = visitSchedule2,
+                                                trtNames=trtNames,
+                                                N = N,
+                                                fuTime = fuTime,
+                                                ppAnalysis = ppAnalysis,
+                                                missVaccProb = missVaccProb,
+                                                ppAtRiskTimePoint = ppAtRiskTimePoint,
+                                                Seed = randomSeed+i)
 
-      if ( !is.null(missVaccProb) ) {
-        # create a set of indicators of belonging to a per-protocol cohort
-        if ( !is.null(randomSeed) ) set.seed( randomSeed+i )
-        out$pp<- rbinom( nrow(out), 1, prob=1 - missVaccProb)
-      }
-
-      trialList[[ i ]] <- out
-      ## store rates into ratesList
+      ## store sampled posterior arm-specific event rates
       for (j in 1:nArms){
-        eventPostRate[[j]][i]<-eventRate[j]
+        eventPostRate[[j]][i] <- eventRate[j]
       }
     }
 
     ## Put everything into a "trial Object"
-    trialObj <- list(
-      trialData = trialList,
-      nTrials = nTrials,
-      N = N,
-      rates = list(enrollRate=enrollmentRate, #weekly enrollment rate
-                   dropRate=dropRate*52, #annual dropout rate
-                   eventPostRate=list(eventPostRate[[1]]*52,eventPostRate[[2]]*52,eventPostRate[[3]]*52) #annual event rates
-                   ),
-      BetaOverBetaPlusTk = beta/(beta+T_k),
-      TkOverTstar = T_k/T_star,
-      randomSeed = randomSeed
-    )
+    trialObj <- list(trialData = trialList, nTrials = nTrials, N = N,
+                     rates = list(enrollRate=enrollmentRate, dropRate=dropRate * 52, eventPostRate=lapply(eventPostRate, function(r){ r * 52 })),
+                     BetaOverBetaPlusTk = beta / (beta+T_k),
+                     TkOverTstar = T_k / T_star,
+                     randomSeed = randomSeed)
 
     # save trial output and information on used rates
-    if (!is.null(saveDir)) {
-      if (is.null(saveFile) ) {
+    if (!is.null(saveDir)){
+      if (is.null(saveFile)){
 
-        #In file name, eventPriorRate shows the per person-YEAR rate
-        saveFile <-
-          paste0("completeTrial_byArm_eventPriorRateC3=", round(eventPriorRate[1]*52,3),
-                 "_eventPriorRateT1=",round(eventPriorRate[2]*52,3),
-                 "_eventPriorRateT2=",round(eventPriorRate[3]*52,3),
-                 "_eventPriorWt=",round(eventPriorWeight,3),".RData" )
+        # in the file name, eventPriorRate shows the per person-YEAR rate
+        saveFile <- paste0("completeTrial_byArm_", paste(paste0("eventPriorRate", trtNames, "=", round(eventPriorRate * 52, 3)), collapse="_"), "_eventPriorWt=", round(eventPriorWeight, 3), ".RData")
       }
 
       save(trialObj, file=file.path(saveDir, saveFile))
     }
-    return( invisible( trialObj ) )
 
+    return(invisible(trialObj))
   }   ######################## End of completeTrial.byArm function #######################
 
 
@@ -1099,6 +1143,7 @@ to_rcdf <- function(s, min){
 #' @param xlab a character string for the user-specified x-axis label. If \code{NULL} (default), then the label "Total Number of Infections (n)" will be used.
 #' @param ylab a character string for the user-specified y-axis label. If \code{NULL} (default), then the label "P( Total Number of Infections >= n ) x 100" will be used.
 #' @param power.lab a character string for the user-specified power-axis label. If \code{NULL} (default), then the label "Power for TE = \code{power.TE} (x 100)" will be used.
+#' @param xPosLegend a numeric value in \eqn{[0,1]} (0.67 by default) specifying the x-coordinate for the position of the legend
 #' @param fileDir a character string specifying a path for the input directory
 #'
 #' @return None. The function is called solely for plot generation.
@@ -1145,6 +1190,7 @@ plotRCDF.pooledArms <- function(eventTimeFrame=NULL, #the time frame to count ev
                                 xlab=NULL,
                                 ylab=NULL,
                                 power.lab=NULL,
+                                xPosLegend=0.67,
                                 fileDir){
 
   dat  <- vector("list", length(eventPriorWeight))
@@ -1152,32 +1198,38 @@ plotRCDF.pooledArms <- function(eventTimeFrame=NULL, #the time frame to count ev
   for (j in 1:length(eventPriorWeight)){
     wt<-eventPriorWeight[j]
     # a list named 'trialObj'
-    load(paste0(fileDir,"/completeTrial_pooled_eventPriorRate=",eventPriorRate,"_eventPriorWt=",wt,".RData"))
+    load(file.path(fileDir, paste0("completeTrial_pooled_eventPriorRate=", eventPriorRate, "_eventPriorWt=", wt, ".RData")))
     legend.Prior.weight<-trialObj$BetaOverBetaPlusTk
     TNI<-rep(NA,length(trialObj$trialData))
 
-    if(is.null(eventTimeFrame)){
-      if(eventPPcohort==FALSE){
-      for (i in 1:length(TNI)){
-        TNI[i]<-sum(trialObj$trialData[[i]]$event)
-      }}
-      if(eventPPcohort==TRUE){
-        if(!"pp" %in% colnames(trialObj$trialData[[1]])){
-          stop("trialData does not have a variable named 'pp'.")
-        }else{
-          TNI[i]<-sum( trialObj$trialData[[i]]$event[trialObj$trialData[[i]]$pp==1])
-        }}
-    }else{
-      if(eventPPcohort==FALSE){
+    if (is.null(eventTimeFrame)){
+      if (!eventPPcohort){
         for (i in 1:length(TNI)){
-          TNI[i]<-sum(trialObj$trialData[[i]]$event[trialObj$trialData[[i]]$entry>=eventTimeFrame[1] & trialObj$trialData[[i]]$exit<=eventTimeFrame[2]])
-        }}
-      if(eventPPcohort==TRUE){
-        if(!"pp" %in% colnames(trialObj$trialData[[1]])){
+          TNI[i]<-sum(trialObj$trialData[[i]]$event)
+        }
+      } else {
+        if (!"pp" %in% colnames(trialObj$trialData[[1]])){
           stop("trialData does not have a variable named 'pp'.")
-        }else{
-          TNI[i]<-sum( trialObj$trialData[[i]]$event[trialObj$trialData[[i]]$entry>=eventTimeFrame[1] & trialObj$trialData[[i]]$exit<=eventTimeFrame[2] & trialObj$trialData[[i]]$pp==1])
-        }}
+        }
+        for (i in 1:length(TNI)){
+          TNI[i]<-sum(subset(trialObj$trialData[[i]], pp==1)$event)
+        }
+      }
+    } else {
+      if (!eventPPcohort){
+        for (i in 1:length(TNI)){
+          trialObj$trialData[[i]]$eventTime <- trialObj$trialData[[i]]$exit - trialObj$trialData[[i]]$entry
+          TNI[i]<-sum(subset(trialObj$trialData[[i]], eventTime >= eventTimeFrame[1] & eventTime <= eventTimeFrame[2])$event)
+        }
+      } else {
+        if (!"pp" %in% colnames(trialObj$trialData[[1]])){
+          stop("trialData does not have a variable named 'pp'.")
+        }
+        for (i in 1:length(TNI)){
+          trialObj$trialData[[i]]$eventTime <- trialObj$trialData[[i]]$exit - trialObj$trialData[[i]]$entry
+          TNI[i] <- sum(subset(trialObj$trialData[[i]], eventTime >= eventTimeFrame[1] & eventTime <= eventTimeFrame[2] & pp==1)$event)
+        }
+      }
     }
 
     rm(trialObj)
@@ -1215,7 +1267,7 @@ plotRCDF.pooledArms <- function(eventTimeFrame=NULL, #the time frame to count ev
   }
 
   tmp<-seq(10,200,10)
-  tmp<-tmp[tmp>=(myxlim[1]+5) & tmp<=(myxlim[2]-5)]
+  tmp<-tmp[tmp>=(myxlim[1]+5) & tmp<=(myxlim[2]-6)]
 
   x.label<-c(myxlim[1],tmp,myxlim[2])
   colors<-c("blue","red","seagreen")
@@ -1363,7 +1415,7 @@ plotRCDF.pooledArms <- function(eventTimeFrame=NULL, #the time frame to count ev
   if(is.null(ylab)){mtext("P( Total Number of Infections >= n ) x 100", side=2, las=0, line=2.5, cex=mycex2)
   }else{mtext(ylab, side=2, las=0, line=2.5, cex=mycex2)}
 
-  legend(0.77*max(x.label),1,legend=round(c(dat[[1]]$legend.Prior.weight,dat[[2]]$legend.Prior.weight,dat[[3]]$legend.Prior.weight),2), cex=0.7, col=colors, pch=pchar,
+  legend((xPosLegend+0.1)*max(x.label),0.9,legend=round(c(dat[[1]]$legend.Prior.weight,dat[[2]]$legend.Prior.weight,dat[[3]]$legend.Prior.weight),2), cex=0.7, col=colors, pch=pchar,
          lty=1, bty = "n", title="Prior weight")
 
   legend.text <- NULL
@@ -1371,7 +1423,7 @@ plotRCDF.pooledArms <- function(eventTimeFrame=NULL, #the time frame to count ev
     legend.text <- c(legend.text, paste0("P(>=",target[1],") = ",format(dat[[j]]$target.p[[1]]$p*100, digits=1, nsmall=1-(dat[[j]]$target.p[[1]]$p>=0.9995)),"% (95% CI, ",format(dat[[j]]$target.p[[1]]$p.CI[1]*100, digits=1, nsmall=1-(dat[[j]]$target.p[[1]]$p.CI[1]>=0.9995))," to ",format(dat[[j]]$target.p[[1]]$p.CI[2]*100, digits=1, nsmall=1-(dat[[j]]$target.p[[1]]$p.CI[2]>=0.9995)),")","\n",
                                          "P(>=",target[2],") = ",format(dat[[j]]$target.p[[2]]$p*100, digits=1, nsmall=1-(dat[[j]]$target.p[[2]]$p>=0.9995)),"% (95% CI, ",format(dat[[j]]$target.p[[2]]$p.CI[1]*100, digits=1, nsmall=1-(dat[[j]]$target.p[[2]]$p.CI[1]>=0.9995))," to ",format(dat[[j]]$target.p[[2]]$p.CI[2]*100, digits=1, nsmall=1-(dat[[j]]$target.p[[2]]$p.CI[2]>=0.9995)),")"))
   }
-  legend(0.65*max(x.label), 0.8, lty=1, col=colors, pch=pchar, bty="n", cex=0.6, legend=legend.text, x.intersp=0.6, y.intersp=1.6, pt.cex=0.7)
+  legend(xPosLegend*max(x.label), 0.7, lty=1, col=colors, pch=pchar, bty="n", cex=0.5, legend=legend.text, x.intersp=0.5, y.intersp=1.6, pt.cex=0.7)
 
   if(power.axis==TRUE){
     if(!is.numeric(power.TE)){
@@ -1409,9 +1461,10 @@ plotRCDF.pooledArms <- function(eventTimeFrame=NULL, #the time frame to count ev
 #' Takes the output from the \code{\link{completeTrial.byArm}} function and generates a plot describing characteristics of the estimated distribution of the treatment arm-specific number of endpoints.
 #'
 #' @param arm a character string matching a treatment label in the \code{arm} variable in \code{interimData} that indicates the treatment arm for which the plot will be generated
+#' @param trtNames a character vector of all treatment labels listed in the same order as in \code{trtNames} in \code{\link{completeTrial.byArm}}
 #' @param eventTimeFrame a time frame within which endpoints are counted, specified in weeks as \code{c(start, end)}. If \code{NULL} (default), then all endpoints are counted.
 #' @param eventPPcohort a logical value. If \code{TRUE}, only endpoints in the per-protocol cohort are counted. The default value is \code{FALSE}.
-#' @param eventPriorRate a numeric vector of treatment arm-specific prior mean incidence rates for the endpoint, expressed as numbers of events per person-year at risk, with the arms in the same order as in the equally named input argument in the \code{\link{completeTrial.byArm}} function
+#' @param eventPriorRate a numeric vector of treatment arm-specific prior mean incidence rates for the endpoint, expressed as numbers of events per person-year at risk, matching the order of treatment arms in \code{trtNames}
 #' @param eventPriorWeight a numeric vector in which each value represents a weight (i.e., a separate scenario) assigned to the prior gamma distribution of the treatment arm-specific event rate at the time when 50\% of the estimated person-time at risk in the given \code{arm} has been accumulated
 #' @param xlim a numeric vector of the form \code{c(xmin, xmax)} for the user-specified x-axis limits. If \code{NULL} (default), then the computed range of x-axis values will be used.
 #' @param xlab a character string for the user-specified x-axis label. If \code{NULL} (default), then the label "Number of Infections in Group \code{arm} (n)" will be used.
@@ -1448,13 +1501,14 @@ plotRCDF.pooledArms <- function(eventTimeFrame=NULL, #the time frame to count ev
 #' pdf(file=paste0("./","rcdf_byArm_arm=T1_",
 #' "eventPriorRateC3=0.06_eventPriorRateT1=0.03_eventPriorRateT2=0.03.pdf"), width=6,
 #' height=5)
-#' plotRCDF.byArm(arm="T1", eventPriorRate=c(0.06,0.03,0.03), eventPriorWeight=weights,
-#' fileDir="./")
+#' plotRCDF.byArm(arm="T1", trtNames=c("C3","T1","T2"), eventPriorRate=c(0.06,0.03,0.03),
+#' eventPriorWeight=weights, fileDir="./")
 #' dev.off()
 #'
 #' @seealso \code{\link{completeTrial.byArm}} and \code{\link{plotRCDF.pooledArms}}
 #' @export
 plotRCDF.byArm<-function(arm,
+                         trtNames,
                          eventTimeFrame=NULL,
                          eventPPcohort=FALSE,
                          eventPriorRate,
@@ -1463,40 +1517,48 @@ plotRCDF.byArm<-function(arm,
                          xlab=NULL,
                          ylab=NULL,
                          fileDir){
+  if (!(arm %in% trtNames)){ stop("'arm' is not included in 'trtNames'.") }
+
   #plot arm
   dat  <- vector("list", length(eventPriorWeight))
 
   for (j in 1:length(eventPriorWeight)){
     wt<-eventPriorWeight[j]
 
-    fileName <- paste0("completeTrial_byArm_eventPriorRateC3=",eventPriorRate[1],"_eventPriorRateT1=",eventPriorRate[2],"_eventPriorRateT2=",eventPriorRate[3],"_eventPriorWt=",wt,".RData")
+    fileName <- paste0("completeTrial_byArm_", paste(paste0("eventPriorRate", trtNames, "=", eventPriorRate), collapse="_"), "_eventPriorWt=", wt, ".RData")
     if (file.exists(file.path(fileDir, fileName))){ load(file.path(fileDir, fileName)) }
 
-    legend.Prior.weight<-trialObj$BetaOverBetaPlusTk[switch(arm, C3=1, T1=2, T2=3)]
+    legend.Prior.weight<-trialObj$BetaOverBetaPlusTk[which(trtNames==arm)]
     TNI<-rep(NA,length(trialObj$trialData))
 
-    if(is.null(eventTimeFrame)){
-      if(eventPPcohort==FALSE){
-      for (i in 1:length(TNI)){
-        TNI[i]<-sum(trialObj$trialData[[i]]$event[trialObj$trialData[[i]]$arm==arm])
-      }}
-      if(eventPPcohort==TRUE){
-        if(!"pp" %in% colnames(trialObj$trialData[[1]])){
-          stop("trialData does not have a variable named 'pp'")
-        }else{
-          TNI[i]<-sum( trialObj$trialData[[i]]$event[trialObj$trialData[[i]]$pp==1 & trialObj$trialData[[i]]$arm==arm])
-        }}
-    }else{
-      if(eventPPcohort==FALSE){
+    if (is.null(eventTimeFrame)){
+      if (!eventPPcohort){
         for (i in 1:length(TNI)){
-          TNI[i]<-sum(trialObj$trialData[[i]]$event[trialObj$trialData[[i]]$entry>=eventTimeFrame[1] & trialObj$trialData[[i]]$exit<=eventTimeFrame[2] & trialObj$trialData[[i]]$arm==arm])
-        }}
-      if(eventPPcohort==TRUE){
-        if(!"pp" %in% colnames(trialObj$trialData[[1]])){
+          TNI[i] <- sum(subset(trialObj$trialData[[i]], arm==arm)$event)
+        }
+      } else {
+        if (!"pp" %in% colnames(trialObj$trialData[[1]])){
           stop("trialData does not have a variable named 'pp'")
-        }else{
-          TNI[i]<-sum( trialObj$trialData[[i]]$event[trialObj$trialData[[i]]$entry>=eventTimeFrame[1] & trialObj$trialData[[i]]$exit<=eventTimeFrame[2] & trialObj$trialData[[i]]$pp==1 & trialObj$trialData[[i]]$arm==arm])
-        }}
+        }
+        for (i in 1:length(TNI)){
+          TNI[i] <- sum(subset(trialObj$trialData[[i]], arm==arm & pp==1)$event)
+        }
+      }
+    } else {
+      if (!eventPPcohort){
+        for (i in 1:length(TNI)){
+          trialObj$trialData[[i]]$eventTime <- trialObj$trialData[[i]]$exit - trialObj$trialData[[i]]$entry
+          TNI[i] <- sum(subset(trialObj$trialData[[i]], eventTime >= eventTimeFrame[1] & eventTime <= eventTimeFrame[2] & arm==arm)$event)
+        }
+      } else {
+        if (!"pp" %in% colnames(trialObj$trialData[[1]])){
+          stop("trialData does not have a variable named 'pp'")
+        }
+        for (i in 1:length(TNI)){
+          trialObj$trialData[[i]]$eventTime <- trialObj$trialData[[i]]$exit - trialObj$trialData[[i]]$entry
+          TNI[i] <- sum(subset(trialObj$trialData[[i]], eventTime >= eventTimeFrame[1] & eventTime <= eventTimeFrame[2] & arm==arm & pp==1)$event)
+        }
+      }
     }
 
     rm(trialObj)
@@ -1561,7 +1623,8 @@ plotRCDF.byArm<-function(arm,
 
   tmp <- unique(tmp)
 
-  if(min(diff(sort(tmp)))>=3 | max(tmp)-min(tmp)==0){
+  # suppressWarnings() is used because if 'tmp' is of length 1, then diff() returns an empty vector, and 'min' issues a warning
+  if (suppressWarnings(min(diff(sort(tmp))))>=3 | max(tmp)-min(tmp)==0){
     axis(side=1, at=tmp, labels=tmp, tick=FALSE, line=-2, cex.axis=0.5)
   } else {
     if (length(tmp)==3){
@@ -1603,6 +1666,6 @@ plotRCDF.byArm<-function(arm,
   }else{mtext(xlab, side=1, las=0, line=2, cex=mycex2)}
   if(is.null(ylab)){mtext(paste0("P( Number of Infections in Group ",arm," >= n ) x 100"), side=2, las=0, line=2.5, cex=mycex2)
   }else{mtext(ylab, side=2, las=0, line=2.5, cex=mycex2)}
-  legend(0.75*max(x.label),0.9,legend=round(c(dat[[1]]$legend.Prior.weight,dat[[2]]$legend.Prior.weight,dat[[3]]$legend.Prior.weight),2), cex=0.7, col=colors, pch=pchar, lty=1, bty = "n",
+  legend(0.75*max(x.label),0.9,legend=round(sapply(dat, "[[", "legend.Prior.weight"), 2), cex=0.7, col=colors, pch=pchar, lty=1, bty = "n",
          title="Prior weight")
 }
