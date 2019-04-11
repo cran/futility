@@ -1,13 +1,13 @@
-7f6f9052869a7e0d14934dd60cd9ef4e *DESCRIPTION
+d45163c3f067ccf6d9b385bab2c1d132 *DESCRIPTION
 26bb37f76c4a1573a9c7845c367301db *NAMESPACE
-60f7d5a4804e9e1d1a15d495b49ba39a *R/futility.R
+9d404615f931064b89c75de53cf423d8 *R/futility.R
 a15a7de680c4c2f60ea92595fcbcb48a *README.md
 9d44e945c8f21d799d9bc66c8fca5883 *build/vignette.rds
 7fa2d16c526eae5c931d3d2ec5342f37 *inst/doc/bayesianIncidenceRateModel.Rnw
-58bb0d8efba4b0b06619c23ddc8f0884 *inst/doc/bayesianIncidenceRateModel.pdf
+3b237f2852e63aad5e8122b5825e8859 *inst/doc/bayesianIncidenceRateModel.pdf
 d7d693d4aba2407d3508edcd32837326 *man/completeTrial.byArm.Rd
 7a93630be165494a0358b6e5da9ba679 *man/completeTrial.pooledArms.Rd
-8ffa78fc3f44e29a6758b1dc66b5d08b *man/plotRCDF.byArm.Rd
+c22d0096003605991982422bcb6ceb17 *man/plotRCDF.byArm.Rd
 b57f8a2339da443ede5a7a9e400e509e *man/plotRCDF.pooledArms.Rd
 7fa2d16c526eae5c931d3d2ec5342f37 *vignettes/bayesianIncidenceRateModel.Rnw
 1a207ffaf36257816eb19e31f5289c91 *vignettes/references.bib
